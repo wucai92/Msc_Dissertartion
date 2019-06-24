@@ -50,6 +50,11 @@ total_flow$DESTINATION_SUB_N <- stri_omit_empty(total_flow$DESTINATION_SUB_N, na
 total_flow <- total_flow %>% drop_na()
 write.csv(total_flow, file = "total_flow.csv")
 
+time_flow <- sqldf("select TIME_PER_HOUR, sum(TOTAL_TRIPS) as TOTAL_TRIPS from total_flow where DAY_TYPE = 'WEEKDAY' group by TIME_PER_HOUR")
+plot(time_flow,type = "o", col = "red", xlab = "TIME_PER_HOUR", ylab = "TOTAL_TRIPS",
+     main = "Flow chart")
+ggplot(time_flow, aes(x=TIME_PER_HOUR, y=TOTAL_TRIPS)) + geom_bar(stat = "identity")
+
 subzone_wkd_all <- sqldf("select ORIGIN_SUB_C, ORIGIN_SUB_N, DESTINATION_SUB_C, DESTINATION_SUB_N, sum(TOTAL_TRIPS) as TOTAL_TRIPS from total_flow where DAY_TYPE = 'WEEKDAY' group by ORIGIN_SUB_C, DESTINATION_SUB_C")
 head(subzone_wkd_all, n=10)
 subzone_wkd_all <- subzone_wkd_all[30:31501, ]
@@ -72,5 +77,6 @@ palette=hsv(h=1-((de/max(de)*2/3)+1/3),s = 1,v=1)
 plot(s_subzone,vertex.size=3, edge.arrow.mode = 0, edge.width=E(s_subzone)$weight/max(E(s_subzone)$weight)*30, vertex.label=NA, vertex.color=palette, vertex.size=(de/max(de))*15,edge.color=palette_edges)
 
 c_infomap <- cluster_infomap(s_subzone, v.weights = NULL, nb.trials = 10, modularity = FALSE)
-membership(c_infomap)
+info_membership <- cbind(V(s_subzone)$name,c_infomap$membership)
+write.csv(info_membership, file = "info_membership.csv")
 communities(c_infomap)
