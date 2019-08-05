@@ -62,9 +62,10 @@ subzone_wkd_all <- subzone_wkd_all[order(subzone_wkd_all$TOTAL_TRIPS),]
 head(subzone_wkd_all, n=10)
 write.csv(subzone_wkd_all, file = "subzone_wkd_all.csv")
 
-node1=subzone_wkd_all$ORIGIN_SUB_C
-node2=subzone_wkd_all$DESTINATION_SUB_C
-weight=subzone_wkd_all$TOTAL_TRIPS
+subzone_wkd_morning <- read.csv(file="subzone_wkd_morning.csv",head=TRUE,sep=",")
+node1=subzone_wkd_morning$ORIGIN_SUB_C
+node2=subzone_wkd_morning$DESTINATION_SUB_C
+weight=subzone_wkd_morning$TOTAL_TRIPS
 df=data.frame(node1,node2,weight)
 g_subzone=graph.data.frame(df,directed=TRUE)
 
@@ -78,5 +79,22 @@ plot(s_subzone,vertex.size=3, edge.arrow.mode = 0, edge.width=E(s_subzone)$weigh
 
 c_infomap <- cluster_infomap(s_subzone, v.weights = NULL, nb.trials = 10, modularity = FALSE)
 info_membership <- cbind(V(s_subzone)$name,c_infomap$membership)
-write.csv(info_membership, file = "info_membership.csv")
+write.csv(info_membership, file = "info_membership_morning.csv")
 communities(c_infomap)
+
+completedata <- read.csv(file="completedata.csv",head=TRUE,sep=",")
+node1=completedata$ORIGIN_SUB_C
+node2=completedata$DESTINATION_SUB_C
+weight=completedata$TOTAL_TRIPS
+df1=data.frame(node1,node2,weight)
+weight=completedata$prodsimest4_scenario
+df2=data.frame(node1,node2,weight)
+g_origin=graph.data.frame(df1,directed=TRUE)
+g_after=graph.data.frame(df2,directed=TRUE)
+
+infomap_origin <- cluster_infomap(g_origin, v.weights = NULL, nb.trials = 10, modularity = FALSE)
+infomap_after <- cluster_infomap(g_after, v.weights = NULL, nb.trials = 10, modularity = FALSE)
+membership <- cbind(V(g_origin)$name,infomap_origin$membership,infomap_after$membership)
+membership_after <- cbind(V(g_after)$name,infomap_after$membership)
+write.csv(membership_origin, file = "membership_origin.csv")
+write.csv(membership, file = "membership.csv")

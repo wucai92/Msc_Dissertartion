@@ -20,6 +20,7 @@ library(stplanr)
 library(ggplot2)
 library(leaflet)
 library(methods)
+library(stringr)
 
 
 
@@ -31,7 +32,7 @@ subzoneSP  <- subzoneSP[order(subzoneSP$SUBZONE_C),]
 subzoneSP$ID <- seq.int(nrow(subzoneSP))
 dist <- spDists(subzoneSP)
 distPair <- melt(dist)
-cdata <- read.csv("subzone_wkd_all.csv")
+cdata <- read.csv("subzone_wkd_morning.csv")
 popspace <- read.csv("subzone.csv")
 cdata$vi1_origpop <- popspace$population[match(cdata$ORIGIN_SUB_C, popspace$SUBZONE_C)]
 cdata$vi2_origcom <- popspace$commerical[match(cdata$ORIGIN_SUB_C, popspace$SUBZONE_C)]
@@ -94,7 +95,7 @@ CalcRSquared <- function(observed,estimated){
   R2 <- r^2
   R2
 }
-CalcRSquared(cdatasub$value,cdatasub$unconstrainedEst2)
+CalcRSquared(cdatasub$TotalNoIntra,cdatasub$unconstrainedEst2)
 CalcRMSE <- function(observed,estimated){
   res <- (observed - estimated)^2
   RMSE <- round(sqrt(mean(res)),3)
@@ -103,5 +104,62 @@ CalcRMSE <- function(observed,estimated){
 CalcRMSE(cdatasub$value,cdatasub$unconstrainedEst2)
 CalcRMSE(cdatasub$value,cdatasub$unconstrainedEst2)
 
-uncosim <- glm(TOTAL_TRIPS ~ log(vi1_origpop+1)+log(wj2_destcom+1)+log(value), na.action = na.exclude, family = poisson(link = "log"), data = cdatasub)
-summary(uncosim)
+prodSim <- glm(TOTAL_TRIPS ~ ORIGIN_SUB_C + log(wj2_destcom+1)+log(value)-1, na.action = na.exclude, family = poisson(link = "log"), data = cdatasub)
+#let's have a look at it's summary...
+summary(prodSim)
+
+O_i <- cdatasub %>% group_by(ORIGIN_SUB_C) %>% summarise(O_i = sum(TOTAL_TRIPS))
+cdatasub$O_i <- O_i$O_i[match(cdatasub$ORIGIN_SUB_C,O_i$ORIGIN_SUB_C)]
+D_j <- cdatasub %>% group_by(DESTINATION_SUB_C) %>% summarise(D_j = sum(TOTAL_TRIPS))
+cdatasub$D_j <- D_j$D_j[match(cdatasub$DESTINATION_SUB_C,D_j$DESTINATION_SUB_C)]
+prodSim_out <- tidy(prodSim)
+prodSim_out
+
+# or you can just pull out the coefficients and put them into an object
+coefs <- as.data.frame(prodSim$coefficients)
+#then once you have done this, you can join them back into the dataframe using a regular expression to match the bits of the identifier that you need - *note, this bit of code below took me about 2 hours to figure out!*
+cdatasub$mu_i <- coefs$`prodSim$coefficients`[match(cdatasub$ORIGIN_SUB_C,sub(".*ORIGIN_SUB_C","", rownames(coefs)))]
+#now, where we have missing values for our reference mu_i variable, fill those with 1s
+head(cdatasub)
+
+mu_i <- prodSim$coefficients[1:303]
+alpha <- prodSim$coefficients[304]
+beta <- prodSim$coefficients[305]
+
+cdatasub$prodsimest1 <- exp((cdatasub$mu_i)+(alpha*log(cdatasub$wj2_destcom+1))+(beta*log(cdatasub$value)))
+
+cdatasub$prodsimFitted <- fitted(prodSim)
+
+head(cdatasub)
+
+cdatasub$prodsimFitted <- round(fitted(prodSim),0)
+#now we can create pivot table to turn paired list into matrix (and compute the margins as well)
+cdatasubmat3 <- dcast(cdatasub, ORIGIN_SUB_C ~ DESTINATION_SUB_C, sum, value.var = "prodsimFitted", margins=c("Orig", "Dest"))
+cdatasubmat3
+CalcRSquared(cdatasub$TOTAL_TRIPS,cdatasub$prodsimFitted)
+
+popspace2 <- read.csv("newsubzone.csv")
+cdatasub$wj3_destscomScenario <- popspace2$floor[match(cdatasub$DESTINATION_SUB_C, popspace2$SUBZONE_C)]
+cdatasub$prodsimest2 <- exp((cdatasub$mu_i)+(alpha*log(cdatasub$wj3_destscomScenario+1))+(beta*log(cdatasub$value)))
+cdatasub$prodsimest2 <- round(cdatasub$prodsimest2,0)
+
+wj2_alpha <- (cdatasub$wj2_destcom+1)^alpha
+value_beta <- (cdatasub$value+1)^beta
+cdatasub$Ai1 <- wj2_alpha*value_beta
+A_i <- cdatasub %>% group_by(ORIGIN_SUB_C) %>% summarise(A_i = sum(Ai1))
+A_i[,2] <- 1/A_i[,2]
+#and write the A_i values back into the data frame
+cdatasub$A_i <- A_i$A_i[match(cdatasub$ORIGIN_SUB_C,A_i$ORIGIN_SUB_C)]
+cdatasub$prodsimest3 <- cdatasub$A_i*cdatasub$O_i*wj2_alpha*value_beta
+
+wj3_alpha <- (cdatasub$wj3_destscomScenario+1)^alpha
+#calculate the first stage of the Ai values
+cdatasub$Ai1 <- wj3_alpha*dist_beta
+#now do the sum over all js bit
+A_i <- cdatasub %>% group_by(ORIGIN_SUB_C) %>% summarise(A_i = sum(Ai1))
+#now divide in to 1
+A_i[,2] <- 1/A_i[,2]
+#and write the A_i values back into the data frame
+cdatasub$A_i <- A_i$A_i[match(cdatasub$ORIGIN_SUB_C,A_i$ORIGIN_SUB_C)]
+cdatasub$prodsimest4_scenario <- cdatasub$A_i*cdatasub$O_i*wj3_alpha*value_beta
+write.csv(cdatasub, file = "completedata.csv")
