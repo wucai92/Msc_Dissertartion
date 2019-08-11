@@ -98,3 +98,24 @@ membership <- cbind(V(g_origin)$name,infomap_origin$membership,infomap_after$mem
 membership_after <- cbind(V(g_after)$name,infomap_after$membership)
 write.csv(membership_origin, file = "membership_origin.csv")
 write.csv(membership, file = "membership.csv")
+
+final <- read.csv(file="final_3.csv",head=TRUE,sep=",")
+current <- sqldf("select memebershi as membership, sum(commerical) as commercial, sum(population) from final group by memebershi")
+predicted <- sqldf("select membership, sum(floor) as commercial, sum(population) from final group by membership")
+current <- current[2:13,]
+predicted <- predicted[2:12,]
+completedata <- sqldf("SELECT completedata.ORIGIN_SUB_C, completedata.DESTINATION_SUB_C, completedata.TOTAL_TRIPS AS CURRENT, completedata.prodsimest4_scenario AS PRESICTED, final.memebershi AS current_origin FROM completedata LEFT JOIN final ON completedata.ORIGIN_SUB_C = final.SUBZONE_C")
+completedata <- sqldf("SELECT completedata.ORIGIN_SUB_C, completedata.DESTINATION_SUB_C, completedata.CURRENT, completedata.PRESICTED, current_origin, final.memebershi AS current_destination FROM completedata LEFT JOIN final ON completedata.DESTINATION_SUB_C = final.SUBZONE_C")
+completedata <- sqldf("SELECT completedata.ORIGIN_SUB_C, completedata.DESTINATION_SUB_C, completedata.CURRENT, completedata.PRESICTED, completedata.current_origin, completedata.current_destination, final.membership AS predicted_origin FROM completedata LEFT JOIN final ON completedata.ORIGIN_SUB_C = final.SUBZONE_C")
+completedata <- sqldf("SELECT completedata.ORIGIN_SUB_C, completedata.DESTINATION_SUB_C, completedata.CURRENT, completedata.PRESICTED, completedata.current_origin, completedata.current_destination, predicted_origin, final.membership AS predicted_destination FROM completedata LEFT JOIN final ON completedata.DESTINATION_SUB_C = final.SUBZONE_C")
+
+current_nodality <- sqldf("select current_destination, sum(CURRENT) AS nodality from completedata group by current_destination")
+current_centrality <- sqldf("select current_destination, sum(CURRENT) AS centrality from completedata where current_origin != current_destination group by current_destination")
+current$nodality <- current_nodality$nodality
+current$centrality <- current_centrality$centrality
+predicted_nodality <- sqldf("select predicted_destination, sum(PRESICTED) AS nodality from completedata group by predicted_destination")
+predicted_centrality <- sqldf("select predicted_destination, sum(PRESICTED) AS centrality from completedata where predicted_origin != predicted_destination group by predicted_destination")
+predicted$nodality <- predicted_nodality$nodality
+predicted$centrality <- predicted_centrality$centrality
+write.csv(current, file = "current.csv")
+write.csv(predicted, file = "predicted.csv")
